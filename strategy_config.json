@@ -1,0 +1,11 @@
+{
+  "goal": "views",
+  "country": "Bangladesh",
+  "audience": "general",
+  "age_range": "18-35",
+  "main_keywords": ["cooking", "recipe", "bangladeshi food"],
+  "tone": "engaging",
+  "content_type": "tutorial",
+  "upload_schedule": "weekly",
+  "target_duration": "8-12 minutes"
+}

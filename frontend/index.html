@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI SEO Assistant - YouTube Channel Analysis</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <h1 class="logo">🚀 AI SEO Assistant</h1>
+            <p class="subtitle">Private YouTube Channel Analysis & Strategy</p>
+            <div class="status-bar">
+                <span class="status-indicator" id="statusIndicator">🟢 Online</span>
+                <span class="strategy-count" id="strategyCount">0 strategies saved</span>
+            </div>
+        </header>
+
+        <!-- Main Chat Interface -->
+        <main class="chat-container">
+            <div class="messages" id="messages">
+                <!-- Welcome message -->
+                <div class="message ai-message">
+                    <div class="avatar">🤖</div>
+                    <div class="content">
+                        <div class="text">
+                            <p>Hello! I'm your AI SEO assistant. I can help you:</p>
+                            <ul>
+                                <li>Analyze your YouTube channel performance</li>
+                                <li>Optimize video titles, descriptions, and tags</li>
+                                <li>Suggest content strategies based on trends</li>
+                                <li>Identify growth opportunities</li>
+                                <li>Create SEO-optimized content ideas</li>
+                            </ul>
+                            <p>What would you like to know about your YouTube SEO strategy?</p>
+                        </div>
+                        <div class="timestamp">Just now</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading indicator -->
+            <div class="loading" id="loadingIndicator" style="display: none;">
+                <div class="loading-dots">
+                    <span></span>
+                    <span></span>
+                    <span></span>
+                </div>
+                <span class="loading-text">AI is thinking...</span>
+            </div>
+
+            <!-- Input area -->
+            <div class="input-area">
+                <div class="input-container">
+                    <textarea 
+                        id="messageInput" 
+                        placeholder="Ask me anything about YouTube SEO..." 
+                        rows="1"
+                        maxlength="2000"
+                    ></textarea>
+                    <button id="sendButton" class="send-button" disabled>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 2L11 13"></path>
+                            <path d="M22 2L15 22L11 13L2 9L22 2Z"></path>
+                        </svg>
+                    </button>
+                </div>
+                <div class="input-footer">
+                    <span class="char-count" id="charCount">0 / 2000</span>
+                    <div class="shortcuts">
+                        <span>Press Enter to send, Shift+Enter for new line</span>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h3>Recent Strategies</h3>
+                <button class="close-sidebar" id="closeSidebar">&times;</button>
+            </div>
+            <div class="sidebar-content">
+                <div class="strategies-list" id="strategiesList">
+                    <!-- Recent strategies will be loaded here -->
+                </div>
+            </div>
+        </aside>
+
+        <!-- Sidebar toggle -->
+        <button class="sidebar-toggle" id="sidebarToggle">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M3 12H21M3 6H21M3 18H21"></path>
+            </svg>
+        </button>
+    </div>
+
+    <!-- Scripts -->
+    <script src="app.js"></script>
+</body>
+</html> 

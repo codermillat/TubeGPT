@@ -1,0 +1,455 @@
+---
+alwaysApply: true
+---
+# Cursor Rules for AI-Powered SEO YouTube Assistant
+
+## 🎯 Project Context
+
+This is a FastAPI-based AI-powered SEO assistant for YouTube channel analysis using:
+- **Backend**: Python 3.9+, FastAPI, Pydantic, AsyncIO
+- **AI Integration**: Google Gemini AI, YouTube Data API v3
+- **Frontend**: Vanilla JavaScript, HTML5, CSS3
+- **Storage**: Local JSON files, no external databases
+- **Architecture**: Service-oriented, dependency injection
+
+## 📋 Core Development Rules
+
+### 1. Import Management
+```python
+# ALWAYS use absolute imports from app root
+from app.services.ai_service import AIService
+from app.clients.youtube_client import YouTubeClient
+from app.core.config import settings
+
+# NEVER use relative imports
+# from ..services.ai_service import AIService  # ❌ WRONG
+
+# Group imports: standard library → third-party → local
+import asyncio
+import logging
+from datetime import datetime
+from typing import Optional, Dict, Any
+
+import aiohttp
+from fastapi import FastAPI, HTTPException
+from pydantic import BaseModel
+
+from app.core.config import settings
+from app.services.ai_service import AIService
+```
+
+### 2. Configuration and Environment
+```python
+# ALWAYS use environment variables for configuration
+from app.core.config import settings
+
+# Good ✅
+api_key = settings.GEMINI_API_KEY
+base_url = settings.YOUTUBE_API_BASE_URL
+
+# Bad ❌
+api_key = "hardcoded_key"
+base_url = "https://api.youtube.com"
+```
+
+### 3. Error Handling Patterns
+```python
+# ALWAYS use structured error handling
+import logging
+from typing import Optional
+
+logger = logging.getLogger(__name__)
+
+async def fetch_youtube_data(video_id: str) -> Optional[Dict[str, Any]]:
+    """
+    Fetch YouTube video data with proper error handling.
+    
+    Args:
+        video_id: YouTube video identifier
+        
+    Returns:
+        Video data dictionary or None if error
+        
+    Raises:
+        HTTPException: For API errors
+        ValidationError: For invalid input
+    """
+    try:
+        # Implementation here
+        pass
+    except aiohttp.ClientError as e:
+        logger.error(f"Network error fetching video {video_id}: {e}")
+        raise HTTPException(status_code=503, detail="Service unavailable")
+    except Exception as e:
+        logger.error(f"Unexpected error fetching video {video_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error")
+```
+
+### 4. Service Layer Architecture
+```python
+# ALWAYS create service classes for business logic
+from abc import ABC, abstractmethod
+from typing import Protocol
+
+class AIServiceProtocol(Protocol):
+    """Protocol for AI service implementations."""
+    
+    async def analyze_video(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze video with AI."""
+        ...
+
+class AIService:
+    """Service for AI-powered analysis."""
+    
+    def __init__(self, gemini_client: GeminiClient):
+        self.gemini_client = gemini_client
+        self.logger = logging.getLogger(__name__)
+    
+    async def analyze_video(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze video performance with AI insights."""
+        try:
+            # Business logic here
+            pass
+        except Exception as e:
+            self.logger.error(f"AI analysis failed: {e}")
+            raise
+```
+
+### 5. Data Models and Validation
+```python
+# ALWAYS use Pydantic models for data validation
+from pydantic import BaseModel, Field, validator
+from typing import Optional, List
+from datetime import datetime
+
+class VideoAnalytics(BaseModel):
+    """YouTube video analytics data model."""
+    
+    video_id: str = Field(..., description="YouTube video ID")
+    title: str = Field(..., min_length=1, max_length=100)
+    view_count: int = Field(ge=0, description="Video view count")
+    like_count: int = Field(ge=0, description="Video like count")
+    published_at: datetime = Field(..., description="Video publication date")
+    tags: List[str] = Field(default_factory=list, max_items=50)
+    engagement_rate: Optional[float] = Field(None, ge=0.0, le=100.0)
+    
+    @validator('engagement_rate')
+    def calculate_engagement(cls, v, values):
+        """Calculate engagement rate if not provided."""
+        if v is None and 'view_count' in values:
+            views = values['view_count']
+            likes = values.get('like_count', 0)
+            if views > 0:
+                return (likes / views) * 100
+        return v
+    
+    class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+```
+
+### 6. Async/Await Patterns
+```python
+# ALWAYS use async/await for I/O operations
+import asyncio
+import aiohttp
+from typing import List, Dict, Any
+
+class YouTubeClient:
+    """Async YouTube API client."""
+    
+    def __init__(self, session: aiohttp.ClientSession):
+        self.session = session
+    
+    async def get_videos_batch(self, video_ids: List[str]) -> List[Dict[str, Any]]:
+        """Fetch multiple videos concurrently."""
+        tasks = [self.get_video(video_id) for video_id in video_ids]
+        return await asyncio.gather(*tasks, return_exceptions=True)
+    
+    async def get_video(self, video_id: str) -> Dict[str, Any]:
+        """Fetch single video data."""
+        async with self.session.get(f"/videos/{video_id}") as response:
+            response.raise_for_status()
+            return await response.json()
+```
+
+### 7. Testing Requirements
+```python
+# ALWAYS write tests for new modules
+import pytest
+from unittest.mock import AsyncMock, patch
+from app.services.ai_service import AIService
+from app.clients.gemini_client import GeminiClient
+
+class TestAIService:
+    """Test suite for AI service."""
+    
+    @pytest.fixture
+    def mock_gemini_client(self):
+        """Mock Gemini client for testing."""
+        return AsyncMock(spec=GeminiClient)
+    
+    @pytest.fixture
+    def ai_service(self, mock_gemini_client):
+        """AI service instance with mocked dependencies."""
+        return AIService(gemini_client=mock_gemini_client)
+    
+    @pytest.mark.asyncio
+    async def test_analyze_video_success(self, ai_service, mock_gemini_client):
+        """Test successful video analysis."""
+        # Arrange
+        video_data = {"video_id": "test123", "title": "Test Video"}
+        expected_analysis = {"insights": "Great video!"}
+        mock_gemini_client.analyze.return_value = expected_analysis
+        
+        # Act
+        result = await ai_service.analyze_video(video_data)
+        
+        # Assert
+        assert result == expected_analysis
+        mock_gemini_client.analyze.assert_called_once_with(video_data)
+```
+
+### 8. Logging Configuration
+```python
+# ALWAYS use structured logging
+import structlog
+from app.core.config import settings
+
+logger = structlog.get_logger()
+
+async def process_video(video_id: str) -> Dict[str, Any]:
+    """Process video with structured logging."""
+    log = logger.bind(video_id=video_id)
+    
+    log.info("Starting video processing")
+    
+    try:
+        # Processing logic
+        result = await analyze_video(video_id)
+        log.info("Video processing completed", result_size=len(result))
+        return result
+    except Exception as e:
+        log.error("Video processing failed", error=str(e))
+        raise
+```
+
+### 9. Dependency Injection
+```python
+# ALWAYS use dependency injection for services
+from fastapi import Depends
+from app.core.dependencies import get_ai_service, get_youtube_client
+
+@app.get("/analyze/{video_id}")
+async def analyze_video(
+    video_id: str,
+    ai_service: AIService = Depends(get_ai_service),
+    youtube_client: YouTubeClient = Depends(get_youtube_client)
+):
+    """Analyze video endpoint with dependency injection."""
+    video_data = await youtube_client.get_video(video_id)
+    analysis = await ai_service.analyze_video(video_data)
+    return analysis
+```
+
+### 10. Frontend Component Organization
+```javascript
+// ALWAYS modularize frontend components
+// File: frontend/components/youtube-analytics.js
+
+class YouTubeAnalytics {
+    constructor(containerId) {
+        this.container = document.getElementById(containerId);
+        this.apiClient = new APIClient();
+        this.init();
+    }
+    
+    async init() {
+        await this.loadAnalytics();
+        this.bindEvents();
+    }
+    
+    async loadAnalytics() {
+        try {
+            const data = await this.apiClient.get('/youtube/overview');
+            this.renderAnalytics(data);
+        } catch (error) {
+            console.error('Failed to load analytics:', error);
+            this.renderError('Failed to load analytics data');
+        }
+    }
+    
+    renderAnalytics(data) {
+        // Render logic here
+    }
+    
+    renderError(message) {
+        this.container.innerHTML = `
+            <div class="error-message">
+                <p>${message}</p>
+                <button onclick="this.loadAnalytics()">Retry</button>
+            </div>
+        `;
+    }
+}
+```
+
+## 🚫 Anti-Patterns to Avoid
+
+### 1. Don't Create Unnecessary Abstractions
+```python
+# Bad ❌ - Over-abstraction
+class AbstractVideoProcessor(ABC):
+    @abstractmethod
+    def process(self, video: Video) -> ProcessedVideo:
+        pass
+
+class ConcreteVideoProcessor(AbstractVideoProcessor):
+    def process(self, video: Video) -> ProcessedVideo:
+        return video  # Does nothing useful
+
+# Good ✅ - Simple and direct
+def process_video(video_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Process video data directly."""
+    return {
+        "processed_at": datetime.now().isoformat(),
+        **video_data
+    }
+```
+
+### 2. Don't Use Global State
+```python
+# Bad ❌ - Global state
+global_cache = {}
+
+def get_video(video_id: str):
+    if video_id in global_cache:
+        return global_cache[video_id]
+    # fetch and cache
+
+# Good ✅ - Dependency injection
+class VideoService:
+    def __init__(self, cache: CacheService):
+        self.cache = cache
+    
+    async def get_video(self, video_id: str):
+        cached = await self.cache.get(video_id)
+        if cached:
+            return cached
+        # fetch and cache
+```
+
+### 3. Don't Mix Concerns
+```python
+# Bad ❌ - Mixed concerns
+class VideoAnalyzer:
+    def analyze_and_save_and_notify(self, video_id: str):
+        # Analyze
+        analysis = self.analyze(video_id)
+        # Save to database
+        self.save_to_db(analysis)
+        # Send notification
+        self.send_email(analysis)
+        # Return result
+        return analysis
+
+# Good ✅ - Separated concerns
+class VideoAnalyzer:
+    def analyze(self, video_data: Dict[str, Any]) -> Dict[str, Any]:
+        """Only analyze video data."""
+        return analysis
+
+class VideoService:
+    def __init__(self, analyzer: VideoAnalyzer, storage: StorageService):
+        self.analyzer = analyzer
+        self.storage = storage
+    
+    async def process_video(self, video_id: str):
+        """Orchestrate video processing."""
+        video_data = await self.get_video_data(video_id)
+        analysis = self.analyzer.analyze(video_data)
+        await self.storage.save(analysis)
+        return analysis
+```
+
+## 📦 Recommended Libraries and Tools
+
+### Backend Development
+- **FastAPI**: Web framework
+- **Pydantic**: Data validation
+- **structlog**: Structured logging
+- **aiohttp**: HTTP client
+- **pytest**: Testing framework
+- **pytest-asyncio**: Async testing
+- **black**: Code formatting
+- **isort**: Import sorting
+- **mypy**: Type checking
+
+### Frontend Development
+- **Vanilla JavaScript**: No frameworks needed
+- **CSS Grid/Flexbox**: Layout
+- **Fetch API**: HTTP requests
+- **Web Components**: Reusable components
+- **Chart.js**: Data visualization (if needed)
+
+### Development Tools
+- **pre-commit**: Git hooks
+- **pytest-cov**: Code coverage
+- **flake8**: Linting
+- **bandit**: Security linting
+- **safety**: Dependency security
+
+## 🔧 IDE Configuration
+
+### VSCode Settings
+```json
+{
+    "python.linting.enabled": true,
+    "python.linting.pylintEnabled": false,
+    "python.linting.flake8Enabled": true,
+    "python.formatting.provider": "black",
+    "python.sortImports.args": ["--profile", "black"],
+    "editor.formatOnSave": true,
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": true
+    }
+}
+```
+
+### Pre-commit Configuration
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/psf/black
+    rev: 23.12.1
+    hooks:
+      - id: black
+        language_version: python3.9
+
+  - repo: https://github.com/pycqa/isort
+    rev: 5.13.2
+    hooks:
+      - id: isort
+        args: ["--profile", "black"]
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 6.1.0
+    hooks:
+      - id: flake8
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.8.0
+    hooks:
+      - id: mypy
+```
+
+## 🎯 Success Metrics
+
+- **Code Coverage**: > 80%
+- **Type Coverage**: > 90%
+- **Linting**: Zero warnings
+- **Security**: Zero vulnerabilities
+- **Performance**: < 100ms API response times
+- **Maintainability**: Clear separation of concerns
+- **Documentation**: All public APIs documented 

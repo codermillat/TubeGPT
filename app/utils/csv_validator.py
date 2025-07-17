@@ -52,6 +52,13 @@ class CSVValidator:
             r'javascript:',               # JavaScript protocol
             r'data:.*base64',            # Base64 data URLs
             r'=\s*[A-Z]+\(',            # Excel formula injection
+            r'=\s*[a-z]+\(',            # Excel formula injection (lowercase)
+            r'^\s*=',                   # Cell starting with equals
+            r'^\s*\+',                  # Cell starting with plus
+            r'^\s*@',                   # Cell starting with at symbol
+            r'^\s*-',                   # Cell starting with minus (formula)
+            r'@[A-Z]+\s*\(',           # Excel functions with @
+            r'\+[A-Z]+\s*\(',          # Excel functions with +
             r'@import\s+',              # CSS imports
             r'<iframe[^>]*>',           # Iframes
             r'<object[^>]*>',           # Objects
@@ -175,12 +182,17 @@ class CSVValidator:
             if invalid_col_names:
                 raise CSVValidationError(f"Invalid column names: {invalid_col_names}")
             
-            # FIXED: Full content validation
+            # FIXED: Full content validation with formula injection check
             full_df = pd.read_csv(file_path)
             row_count = len(full_df)
             
             if row_count > self.max_rows:
                 raise CSVValidationError(f"Too many rows: {row_count} (max: {self.max_rows})")
+            
+            # FIXED: Check for formula injection in cell values
+            formula_injection_detected = self._check_formula_injection(full_df)
+            if formula_injection_detected:
+                raise CSVValidationError(f"Formula injection detected: {formula_injection_detected}")
             
             return {
                 'row_count': row_count,
@@ -382,6 +394,47 @@ class CSVValidator:
             logger.error(f"Quick validation failed: {e}")
             return False
     
+    def _check_formula_injection(self, df: pd.DataFrame) -> Optional[str]:
+        """
+        Check DataFrame for formula injection patterns.
+        
+        Args:
+            df: Pandas DataFrame to check
+            
+        Returns:
+            String describing the injection found, or None if safe
+        """
+        try:
+            for col in df.columns:
+                for idx, value in enumerate(df[col]):
+                    if pd.isna(value):
+                        continue
+                    
+                    str_value = str(value).strip()
+                    if not str_value:
+                        continue
+                    
+                    # Check for dangerous formula patterns
+                    for pattern in self.dangerous_patterns:
+                        if re.search(pattern, str_value, re.IGNORECASE):
+                            return f"Dangerous pattern '{pattern}' found in column '{col}', row {idx + 1}: '{str_value[:50]}...'"
+                    
+                    # Additional formula checks
+                    if str_value.startswith(('=', '+', '-', '@')):
+                        # Allow simple negative numbers
+                        if str_value.startswith('-') and str_value[1:].replace('.', '').isdigit():
+                            continue
+                        return f"Potential formula injection in column '{col}', row {idx + 1}: '{str_value[:50]}...'"
+                    
+                    # Check cell length
+                    if len(str_value) > self.max_cell_length:
+                        return f"Cell too long in column '{col}', row {idx + 1}: {len(str_value)} chars (max: {self.max_cell_length})"
+            
+            return None
+        except Exception as e:
+            logger.error(f"Error checking formula injection: {e}")
+            return f"Error during security validation: {str(e)}"
+    
     def get_file_info(self, file_path: str) -> Dict[str, Any]:
         """
         Get basic file information.
@@ -406,10 +459,53 @@ class CSVValidator:
                 'writable': os.access(file_path, os.W_OK),
                 'extension': Path(file_path).suffix.lower()
             }
-            
+        
         except Exception as e:
             logger.error(f"Error getting file info: {e}")
             return {'exists': False, 'error': str(e)}
 
+
 # FIXED: Global validator instance
-csv_validator = CSVValidator() 
+csv_validator = CSVValidator()
+
+# Standalone function for easy import
+def validate_csv_file(file_path: str, expected_type: str = 'youtube_analytics') -> Dict[str, Any]:
+    """
+    Standalone function to validate CSV files.
+    
+    Args:
+        file_path: Path to the CSV file to validate
+        expected_type: Expected type of CSV data
+        
+    Returns:
+        Validation results dictionary
+        
+    Raises:
+        CSVValidationError: If validation fails
+    """
+    csv_validator = CSVValidator()
+    return csv_validator.validate_csv_file(file_path, expected_type)
+
+def validate_csv_structure(file_path: str) -> Dict[str, Any]:
+    """
+    Simple function to validate CSV structure.
+    
+    Args:
+        file_path: Path to the CSV file to validate
+        
+    Returns:
+        Dict containing validation results with 'valid' key
+    """
+    try:
+        result = validate_csv_file(file_path)
+        return {
+            'valid': result.get('valid', False),
+            'message': result.get('message', 'Validation completed'),
+            'errors': result.get('errors', [])
+        }
+    except Exception as e:
+        return {
+            'valid': False,
+            'message': f'Validation failed: {str(e)}',
+            'errors': [str(e)]
+        } 

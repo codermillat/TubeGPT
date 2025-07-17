@@ -99,8 +99,7 @@ class Settings(BaseSettings):
 
     # Security
     SECRET_KEY: str = Field(
-        default="your-secret-key-change-in-production",
-        description="Secret key for JWT tokens"
+        description="Secret key for JWT tokens (required)"
     )
     CORS_ORIGINS: List[str] = Field(
         default=["http://localhost:3000", "http://127.0.0.1:8000"],
@@ -128,6 +127,17 @@ class Settings(BaseSettings):
         """Validate Gemini API key is provided."""
         if not v and not os.getenv('MOCK_AI', False):
             raise ValueError("GEMINI_API_KEY is required")
+        return v
+
+    @validator('SECRET_KEY')
+    def validate_secret_key(cls, v):
+        """Validate secret key is provided and secure."""
+        if not v:
+            raise ValueError("SECRET_KEY is required for security")
+        if len(v) < 32:
+            raise ValueError("SECRET_KEY must be at least 32 characters for security")
+        if v in ["your-secret-key-change-in-production", "secret", "password", "123456"]:
+            raise ValueError("SECRET_KEY cannot be a common/default value")
         return v
 
     @validator('CORS_ORIGINS', pre=True)

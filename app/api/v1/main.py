@@ -82,19 +82,37 @@ class HealthResponse(BaseModel):
 # Exception handlers
 @app.exception_handler(TubeGPTException)
 async def tube_gpt_exception_handler(request: Request, exc: TubeGPTException):
-    """Handle custom TubeGPT exceptions."""
+    """Handle custom TubeGPT exceptions with correlation tracking."""
     status_code = get_http_status_code(exc)
+    correlation_id = request.headers.get("X-Request-ID", f"app-{int(time.time() * 1000)}")
+    
+    # Structured logging for application exceptions
+    app_logger.warning(
+        "Application exception occurred",
+        extra={
+            "exception_type": type(exc).__name__,
+            "error_code": exc.error_code,
+            "correlation_id": correlation_id,
+            "context": exc.context,
+            "request_path": request.url.path,
+            "status_code": status_code
+        }
+    )
     
     request_logger.log_response(
         status_code=status_code,
         duration_ms=0,  # TODO: Add proper timing
-        correlation_id=request.headers.get("X-Request-ID"),
+        correlation_id=correlation_id,
         error=str(exc)
     )
     
+    # Add correlation ID to response
+    response_data = exc.to_dict()
+    response_data["correlation_id"] = correlation_id
+    
     return JSONResponse(
         status_code=status_code,
-        content=exc.to_dict()
+        content=response_data
     )
 
 @app.exception_handler(HTTPException)
@@ -114,19 +132,38 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
-    """Handle general exceptions."""
-    app_logger.error(f"Unhandled exception: {exc}", exc_info=True)
+    """Handle general exceptions with structured logging."""
+    correlation_id = request.headers.get("X-Request-ID", f"err-{int(time.time() * 1000)}")
+    
+    # Structured error logging with context
+    app_logger.error(
+        "Unhandled exception occurred",
+        extra={
+            "error_type": type(exc).__name__,
+            "error_message": str(exc),
+            "correlation_id": correlation_id,
+            "request_method": request.method,
+            "request_path": request.url.path,
+            "client_ip": request.client.host if request.client else "unknown",
+            "user_agent": request.headers.get("User-Agent", "unknown")
+        },
+        exc_info=True
+    )
     
     request_logger.log_response(
         status_code=500,
         duration_ms=0,  # TODO: Add proper timing
-        correlation_id=request.headers.get("X-Request-ID"),
+        correlation_id=correlation_id,
         error=str(exc)
     )
     
     return JSONResponse(
         status_code=500,
-        content={"error": "InternalServerError", "message": "Internal server error"}
+        content={
+            "error": "InternalServerError", 
+            "message": "Internal server error",
+            "correlation_id": correlation_id
+        }
     )
 
 # Middleware
@@ -581,6 +618,254 @@ async def get_storage_stats(
             detail=f"Failed to get storage stats: {str(e)}"
         )
 
+# Playground endpoint for local browser demo
+@app.post("/playground/analyze")
+async def playground_analyze(
+    request: Request,
+    ai_service: AIService = Depends(get_ai_service),
+    request_id: str = Depends(get_request_id)
+) -> Dict[str, Any]:
+    """
+    Playground endpoint for running full AI strategy analysis.
+    
+    Upload CSV, set parameters, and get complete analysis results.
+    Designed for local browser interface testing.
+    """
+    
+    bound_logger = request_logger.bind(
+        request_id=request_id,
+        endpoint="/playground/analyze"
+    )
+    
+    try:
+        # Get form data
+        form = await request.form()
+        
+        # Validate required fields
+        if "csv_file" not in form:
+            raise HTTPException(status_code=400, detail="CSV file is required")
+        
+        csv_file = form["csv_file"]
+        goal = form.get("goal", "Generate optimized YouTube content strategy")
+        audience = form.get("audience", None)
+        tone = form.get("tone", "engaging")
+        
+        bound_logger.info("Processing playground analysis request")
+        
+        # Save uploaded file temporarily
+        from tempfile import NamedTemporaryFile
+        import os
+        
+        with NamedTemporaryFile(delete=False, suffix=".csv") as temp_file:
+            content = await csv_file.read()
+            temp_file.write(content)
+            temp_file_path = temp_file.name
+        
+        try:
+            # Import and run the strategy runner
+            from app.services.ai_strategy_runner import AIStrategyRunner
+            
+            runner = AIStrategyRunner(
+                correlation_id=request_id,
+                verbose=True
+            )
+            
+            # Run analysis
+            result = await runner.run_full_analysis(
+                csv_file=temp_file_path,
+                goal=goal,
+                audience=audience,
+                tone=tone
+            )
+            
+            bound_logger.info("Playground analysis completed successfully")
+            
+            return {
+                "success": True,
+                "data": result,
+                "playground": True,
+                "download_enabled": True
+            }
+            
+        finally:
+            # Clean up temp file
+            try:
+                os.unlink(temp_file_path)
+            except Exception:
+                pass
+                
+    except HTTPException:
+        raise
+    except Exception as e:
+        bound_logger.error(f"Playground analysis failed: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Analysis failed: {str(e)}"
+        )
+
+
+@app.get("/playground")
+async def playground_interface():
+    """
+    Simple HTML interface for local browser testing.
+    
+    Provides a basic form to upload CSV and run analysis.
+    """
+    
+    html_content = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>🎯 TubeGPT Playground</title>
+        <style>
+            body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+            .header { text-align: center; margin-bottom: 30px; }
+            .form-group { margin-bottom: 20px; }
+            label { display: block; margin-bottom: 5px; font-weight: bold; }
+            input, textarea, select { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 4px; }
+            button { background: #007bff; color: white; padding: 12px 24px; border: none; border-radius: 4px; cursor: pointer; }
+            button:hover { background: #0056b3; }
+            .results { margin-top: 30px; padding: 20px; background: #f8f9fa; border-radius: 4px; }
+            .loading { display: none; text-align: center; margin: 20px 0; }
+        </style>
+    </head>
+    <body>
+        <div class="header">
+            <h1>🎯 TubeGPT Playground</h1>
+            <p>Local-First AI YouTube SEO Assistant</p>
+            <p><small>✅ No Login • ✅ No Cloud • ✅ No Tracking</small></p>
+        </div>
+        
+        <form id="analysisForm" enctype="multipart/form-data">
+            <div class="form-group">
+                <label for="csv_file">YouTube CSV Data File:</label>
+                <input type="file" id="csv_file" name="csv_file" accept=".csv" required>
+                <small>Upload your YouTube analytics CSV file</small>
+            </div>
+            
+            <div class="form-group">
+                <label for="goal">Analysis Goal:</label>
+                <textarea id="goal" name="goal" rows="3" placeholder="E.g., Find gaps and generate 5 high-CTR titles for a female GenZ audience in Bangladesh">Generate optimized YouTube content strategy</textarea>
+            </div>
+            
+            <div class="form-group">
+                <label for="audience">Target Audience:</label>
+                <input type="text" id="audience" name="audience" placeholder="E.g., female GenZ in Bangladesh, tech enthusiasts">
+            </div>
+            
+            <div class="form-group">
+                <label for="tone">Content Tone:</label>
+                <select id="tone" name="tone">
+                    <option value="engaging">Engaging</option>
+                    <option value="curiosity">Curiosity</option>
+                    <option value="authority">Authority</option>
+                    <option value="persuasive">Persuasive</option>
+                    <option value="fear">Fear/Urgency</option>
+                </select>
+            </div>
+            
+            <button type="submit">🚀 Run Analysis</button>
+        </form>
+        
+        <div class="loading" id="loading">
+            <p>🔄 Running AI analysis... This may take a few moments.</p>
+        </div>
+        
+        <div class="results" id="results" style="display: none;">
+            <h3>📊 Analysis Results</h3>
+            <div id="resultsContent"></div>
+            <button onclick="downloadResults()" id="downloadBtn" style="margin-top: 10px;">💾 Download JSON</button>
+        </div>
+        
+        <script>
+            let analysisResults = null;
+            
+            document.getElementById('analysisForm').addEventListener('submit', async function(e) {
+                e.preventDefault();
+                
+                const loading = document.getElementById('loading');
+                const results = document.getElementById('results');
+                const formData = new FormData(this);
+                
+                loading.style.display = 'block';
+                results.style.display = 'none';
+                
+                try {
+                    const response = await fetch('/playground/analyze', {
+                        method: 'POST',
+                        body: formData
+                    });
+                    
+                    const data = await response.json();
+                    
+                    if (data.success) {
+                        analysisResults = data.data;
+                        displayResults(data.data);
+                        results.style.display = 'block';
+                    } else {
+                        alert('Analysis failed: ' + (data.detail || 'Unknown error'));
+                    }
+                } catch (error) {
+                    alert('Request failed: ' + error.message);
+                } finally {
+                    loading.style.display = 'none';
+                }
+            });
+            
+            function displayResults(data) {
+                const content = document.getElementById('resultsContent');
+                const analysis = data.analysis_result;
+                
+                let html = '<h4>🎯 Strategy Summary</h4>';
+                html += '<p>' + (analysis.insights || 'Analysis completed successfully') + '</p>';
+                
+                if (analysis.optimized_content) {
+                    const content = analysis.optimized_content;
+                    
+                    if (content.titles && content.titles.length > 0) {
+                        html += '<h4>📝 Optimized Titles</h4><ul>';
+                        content.titles.forEach(title => {
+                            html += '<li>' + title + '</li>';
+                        });
+                        html += '</ul>';
+                    }
+                    
+                    if (content.tags && content.tags.length > 0) {
+                        html += '<h4>🏷️ SEO Tags</h4>';
+                        html += '<p>' + content.tags.join(', ') + '</p>';
+                    }
+                }
+                
+                if (analysis.keywords && analysis.keywords.keywords) {
+                    html += '<h4>🔍 Keywords Found</h4>';
+                    html += '<p>' + analysis.keywords.keywords.slice(0, 10).join(', ') + '</p>';
+                }
+                
+                content.innerHTML = html;
+            }
+            
+            function downloadResults() {
+                if (analysisResults) {
+                    const blob = new Blob([JSON.stringify(analysisResults, null, 2)], {
+                        type: 'application/json'
+                    });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'tubegpt-analysis-' + new Date().toISOString().split('T')[0] + '.json';
+                    a.click();
+                    URL.revokeObjectURL(url);
+                }
+            }
+        </script>
+    </body>
+    </html>
+    """
+    
+    from fastapi.responses import HTMLResponse
+    return HTMLResponse(content=html_content)
+
+
 # Root endpoint
 @app.get("/")
 async def root():
@@ -595,7 +880,8 @@ async def root():
             "strategies": "/strategies",
             "youtube": "/youtube/overview",
             "timeline": "/timeline",
-            "stats": "/stats"
+            "stats": "/stats",
+            "playground": "/playground"
         }
     }
 

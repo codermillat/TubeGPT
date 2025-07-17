@@ -16,6 +16,7 @@ from typing import Dict, List, Optional, Any
 from app.core.config import settings
 from app.core.exceptions import AIServiceException, GeminiAPIException
 from app.core.logging import ServiceLogger
+from app.core.security import input_sanitizer
 from app.clients.gemini_client import GeminiClient
 from app.services.cache_service import CacheService
 
@@ -80,11 +81,14 @@ class AIService:
                     bound_logger.info("Cache hit for video analysis")
                     return cached_result
             
-            # Generate analysis prompt
+            # Generate analysis prompt with sanitization
             prompt = self._build_analysis_prompt(video_data, analysis_type)
             
-            # Call Gemini API
-            response = await self.gemini_client.generate_response(prompt)
+            # Call Gemini API with retry and timeout
+            response = await self.gemini_client.generate_with_retry(
+                prompt,
+                fallback_response=f"Unable to analyze video at this time. Analysis type: {analysis_type}"
+            )
             
             # Parse and structure response
             analysis_result = self._parse_analysis_response(response, analysis_type)
@@ -305,17 +309,24 @@ class AIService:
         video_data: Dict[str, Any],
         analysis_type: str
     ) -> str:
-        """Build analysis prompt for video."""
+        """Build analysis prompt for video with input sanitization."""
+        # Sanitize input data before building prompt
+        video_data = input_sanitizer.sanitize_dict(video_data, "video_analysis")
+        
         title = video_data.get("snippet", {}).get("title", "")
         description = video_data.get("snippet", {}).get("description", "")
         tags = video_data.get("snippet", {}).get("tags", [])
         statistics = video_data.get("statistics", {})
         
+        # Additional sanitization for critical fields
+        title = input_sanitizer.sanitize_field(title, "video_title")
+        description = input_sanitizer.sanitize_field(description[:500], "video_description") 
+        
         prompt = f"""
         Analyze this YouTube video for {analysis_type} optimization:
         
         Title: {title}
-        Description: {description[:500]}...
+        Description: {description}...
         Tags: {', '.join(tags[:10])}
         Views: {statistics.get('viewCount', 0)}
         Likes: {statistics.get('likeCount', 0)}
@@ -403,6 +414,81 @@ class AIService:
             "confidence": 0.8,
             "timestamp": time.time()
         }
+    
+    async def generate_content_async(
+        self,
+        prompt: str,
+        context: Optional[Dict[str, Any]] = None
+    ) -> str:
+        """
+        Generate AI content based on prompt and context.
+        
+        Args:
+            prompt: The prompt for content generation
+            context: Optional context dictionary
+            
+        Returns:
+            Generated content string
+            
+        Raises:
+            AIServiceException: If generation fails
+        """
+        start_time = time.time()
+        
+        bound_logger = self.logger.bind_operation(
+            "generate_content_async",
+            prompt_length=len(prompt),
+            has_context=bool(context)
+        )
+        
+        try:
+            bound_logger.info("Starting AI content generation")
+            
+            # Sanitize inputs
+            sanitized_prompt = input_sanitizer.sanitize_text(prompt)
+            
+            # Check cache if available
+            cache_key = f"content_generation:{hash(sanitized_prompt)}"
+            if self.cache_service:
+                cached_result = await self.cache_service.get(cache_key)
+                if cached_result:
+                    bound_logger.info("Returning cached content generation result")
+                    return cached_result["content"]
+            
+            # Generate content with Gemini
+            response = await self.gemini_client.generate_content(
+                prompt=sanitized_prompt,
+                context=context or {}
+            )
+            
+            # Cache result if available
+            if self.cache_service:
+                await self.cache_service.set(
+                    cache_key,
+                    {"content": response, "timestamp": time.time()},
+                    ttl=3600  # 1 hour cache
+                )
+            
+            execution_time = time.time() - start_time
+            bound_logger.info(
+                "Content generation completed",
+                execution_time=execution_time,
+                response_length=len(response)
+            )
+            
+            return response
+            
+        except Exception as e:
+            execution_time = time.time() - start_time
+            bound_logger.error(
+                "Content generation failed",
+                error=str(e),
+                execution_time=execution_time
+            )
+            raise AIServiceException(
+                f"Failed to generate content: {e}",
+                context={"prompt_length": len(prompt), "has_context": bool(context)}
+            ) from e
     
     def _parse_suggestion_response(self, response: str) -> Dict[str, Any]:
         """Parse content suggestion response."""

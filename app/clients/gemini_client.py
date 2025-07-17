@@ -6,10 +6,11 @@ Handles all communication with Google's Gemini Pro model.
 import os
 import time
 import logging
+import asyncio
+import random
 import google.generativeai as genai
 from typing import Optional, Dict, Any
 from dotenv import load_dotenv
-import random
 
 # FIXED: Set up logging first before any usage
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -39,6 +40,10 @@ class GeminiClient:
         self.max_retries = max_retries
         self.model = None
         
+        # Timeout configuration
+        self.request_timeout = 60.0  # 60 seconds for Gemini API
+        self.max_backoff = 60.0     # Maximum backoff delay
+        
         if not self.api_key:
             logger.warning(
                 "Gemini API key not found. Client will be in fallback mode. "
@@ -59,9 +64,9 @@ class GeminiClient:
         """Check if Gemini API is available."""
         return self.model is not None
     
-    def generate_with_retry(self, prompt: str, fallback_response: str = None) -> str:
+    async def generate_with_retry(self, prompt: str, fallback_response: str = None) -> str:
         """
-        Generate content with retry logic and fallback.
+        Generate content with retry logic, timeout and fallback.
         
         Args:
             prompt (str): The prompt to send to Gemini
@@ -74,11 +79,24 @@ class GeminiClient:
             logger.warning("Gemini API not available, using fallback")
             return fallback_response or "I'm sorry, I cannot process this request right now. Please try again later."
         
-        # FIXED: Added exponential backoff retry logic
+        # Import input sanitizer and sanitize prompt
+        from app.core.security import input_sanitizer
+        sanitized_prompt = input_sanitizer.sanitize_prompt(prompt, "gemini_api")
+        
+        # FIXED: Added exponential backoff retry logic with timeout
         for attempt in range(self.max_retries):
             try:
                 logger.info(f"Sending request to Gemini (attempt {attempt + 1}/{self.max_retries})")
-                response = self.model.generate_content(prompt)
+                
+                # Use asyncio to add timeout to the synchronous call
+                def _generate():
+                    return self.model.generate_content(sanitized_prompt)
+                
+                # Run with timeout
+                response = await asyncio.wait_for(
+                    asyncio.get_event_loop().run_in_executor(None, _generate),
+                    timeout=self.request_timeout
+                )
                 
                 # FIXED: Validate response before returning
                 if response and response.text and response.text.strip():
@@ -90,6 +108,11 @@ class GeminiClient:
                         break
                     continue
                     
+            except asyncio.TimeoutError:
+                logger.error(f"Gemini API timeout after {self.request_timeout}s (attempt {attempt + 1})")
+                if attempt == self.max_retries - 1:
+                    break
+                    
             except Exception as e:
                 logger.error(f"Gemini API error (attempt {attempt + 1}): {e}")
                 
@@ -98,26 +121,29 @@ class GeminiClient:
                     logger.error("API quota or rate limit exceeded")
                     if attempt < self.max_retries - 1:
                         # FIXED: Exponential backoff with jitter
-                        wait_time = (2 ** attempt) + random.uniform(0, 1)
-                        logger.info(f"Waiting {wait_time:.1f} seconds before retry...")
-                        time.sleep(wait_time)
+                        delay = min(2 ** attempt + random.uniform(0, 1), self.max_backoff)
+                        logger.info(f"Rate limited, waiting {delay:.1f}s before retry...")
+                        await asyncio.sleep(delay)
                         continue
-                    break
-                elif "authentication" in str(e).lower() or "key" in str(e).lower():
-                    logger.error("API authentication failed")
-                    break
-                else:
-                    # FIXED: Generic error with backoff
+                    else:
+                        break
+                elif "network" in str(e).lower() or "connection" in str(e).lower():
+                    logger.error("Network connectivity issue")
                     if attempt < self.max_retries - 1:
-                        wait_time = (2 ** attempt) + random.uniform(0, 1)
-                        logger.info(f"Retrying in {wait_time:.1f} seconds...")
-                        time.sleep(wait_time)
+                        delay = min(1.5 ** attempt, 10.0)  # Shorter delay for network issues
+                        await asyncio.sleep(delay)
+                        continue
+                else:
+                    # Unknown error, retry with exponential backoff
+                    if attempt < self.max_retries - 1:
+                        delay = min(2 ** attempt, self.max_backoff)
+                        await asyncio.sleep(delay)
                         continue
                     break
         
-        # FIXED: Return fallback response when all retries failed
-        logger.error("All retry attempts failed, using fallback response")
-        return fallback_response or "I encountered an error while processing your request. Please try again later or rephrase your question."
+        # All retries failed, use fallback
+        logger.error("All Gemini API attempts failed, using fallback")
+        return fallback_response or "I apologize, but I'm experiencing technical difficulties. Please try again later."
     
     def test_connection(self) -> bool:
         """

@@ -17,6 +17,9 @@ from pathlib import Path
 from typing import Dict, List, Optional, Any
 from threading import RLock
 
+import aiofiles
+from cachetools import TTLCache
+
 from app.core.config import settings
 from app.core.exceptions import StorageException
 from app.core.logging import ServiceLogger
@@ -46,10 +49,8 @@ class MemoryService:
         # Initialize storage directory
         self.storage_path.mkdir(parents=True, exist_ok=True)
         
-        # Cache for recently accessed files
-        self._file_cache: Dict[str, Dict[str, Any]] = {}
-        self._cache_max_size = 100
-        self._cache_ttl = 300  # 5 minutes
+        # TTL cache for recently accessed files (LRU eviction)
+        self._file_cache = TTLCache(maxsize=100, ttl=300)  # 5 minutes TTL, 100 items max
     
     async def save_strategy(
         self,
@@ -100,7 +101,7 @@ class MemoryService:
                     "data": conversation_data
                 }
                 
-                # Save to file
+                # Save to file asynchronously
                 file_path = self.storage_path / filename
                 
                 # Create backup if file exists
@@ -108,9 +109,9 @@ class MemoryService:
                     backup_path = file_path.with_suffix('.json.backup')
                     file_path.rename(backup_path)
                 
-                # Write new file
-                with open(file_path, 'w', encoding='utf-8') as f:
-                    json.dump(strategy_data, f, indent=2, ensure_ascii=False)
+                # Write new file asynchronously
+                async with aiofiles.open(file_path, 'w', encoding='utf-8') as f:
+                    await f.write(json.dumps(strategy_data, indent=2, ensure_ascii=False))
                 
                 # Update cache
                 self._update_cache(filename, strategy_data)
@@ -168,7 +169,7 @@ class MemoryService:
                     bound_logger.info("Cache hit for strategy")
                     return cached_data
                 
-                # Load from file
+                # Load from file asynchronously
                 file_path = self.storage_path / filename
                 
                 if not file_path.exists():
@@ -177,8 +178,9 @@ class MemoryService:
                         context={"filename": filename}
                     )
                 
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    strategy_data = json.load(f)
+                async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
+                    content = await f.read()
+                    strategy_data = json.loads(content)
                 
                 # Update cache
                 self._update_cache(filename, strategy_data)
@@ -574,42 +576,37 @@ class MemoryService:
             }
     
     def _update_cache(self, filename: str, data: Dict[str, Any]) -> None:
-        """Update file cache."""
-        # Remove oldest entries if cache is full
-        if len(self._file_cache) >= self._cache_max_size:
-            oldest_key = min(
-                self._file_cache.keys(),
-                key=lambda k: self._file_cache[k]["accessed_at"]
-            )
-            del self._file_cache[oldest_key]
-        
-        # Add/update entry
-        self._file_cache[filename] = {
-            "data": data,
-            "cached_at": time.time(),
-            "accessed_at": time.time()
-        }
+        """Update file cache with TTL support."""
+        try:
+            # TTLCache handles size and TTL automatically
+            self._file_cache[filename] = {
+                "data": data,
+                "cached_at": time.time(),
+                "accessed_at": time.time()
+            }
+        except Exception as e:
+            self.logger.warning(f"Failed to update cache for {filename}: {e}")
     
     def _get_from_cache(self, filename: str) -> Optional[Dict[str, Any]]:
-        """Get data from cache."""
-        if filename not in self._file_cache:
+        """Get data from cache with TTL support."""
+        try:
+            if filename not in self._file_cache:
+                return None
+            
+            entry = self._file_cache[filename]
+            # Update access time
+            entry["accessed_at"] = time.time()
+            return entry["data"]
+        except Exception as e:
+            self.logger.warning(f"Failed to get from cache for {filename}: {e}")
             return None
-        
-        entry = self._file_cache[filename]
-        
-        # Check if expired
-        if time.time() - entry["cached_at"] > self._cache_ttl:
-            del self._file_cache[filename]
-            return None
-        
-        # Update access time
-        entry["accessed_at"] = time.time()
-        
-        return entry["data"]
     
     def _remove_from_cache(self, filename: str) -> None:
         """Remove data from cache."""
-        self._file_cache.pop(filename, None)
+        try:
+            self._file_cache.pop(filename, None)
+        except Exception as e:
+            self.logger.warning(f"Failed to remove from cache for {filename}: {e}")
     
     def _extract_title(self, data: Dict[str, Any]) -> str:
         """Extract title from strategy data."""

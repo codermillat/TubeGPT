@@ -1,0 +1,73 @@
+{
+  "strategy_id": "0df67f9d",
+  "timestamp": "2025-07-17T16:17:16.931813",
+  "input_file": "sample_data.csv",
+  "goal": "Create viral Python content that gets 1M views",
+  "audience": "beginner programmers",
+  "tone": "curiosity",
+  "analysis_result": {
+    "analysis_result": {
+      "keywords": {
+        "keywords": [],
+        "trends": {},
+        "suggestions": []
+      },
+      "gaps": {
+        "gaps": [],
+        "opportunities": [],
+        "error": "'GapDetector' object has no attribute 'find_content_gaps'"
+      },
+      "optimized_content": {
+        "titles": [
+          "Ultimate Guide to Content Creation",
+          "How to Master YouTube Strategy",
+          "Secret Tips for Success",
+          "Complete Tutorial: Create viral Python content th...",
+          "Pro Strategies for beginner programmers"
+        ],
+        "descriptions": [
+          "Learn everything about Create viral Python content that gets 1M views. This comprehensive guide covers all aspects.",
+          "Discover proven strategies for beginner programmers. Step-by-step tutorial included.",
+          "Master the art of content creation with expert tips."
+        ],
+        "tags": [
+          "tutorial",
+          "guide",
+          "tips",
+          "strategy",
+          "youtube"
+        ],
+        "thumbnail_text": [
+          "ULTIMATE GUIDE",
+          "SECRET TIPS",
+          "PRO STRATEGY"
+        ]
+      },
+      "insights": "🎯 Analysis Complete for: Create viral Python content that gets 1M views\n\n📊 Key Findings:\n• Analyzed 0 relevant keywords from your content\n• Identified 0 content gaps in your niche\n• Generated 5 optimized video concepts\n\n🚀 Top Recommendations:\n• Focus on the identified content gaps for maximum impact\n• Use the provided psychological triggers to increase engagement\n• Implement the suggested tags for better YouTube SEO\n\n💡 Next Steps:\n• Create content around the highest-priority gaps\n• Test different title variations from the suggestions\n• Monitor performance and iterate based on results"
+    },
+    "metadata": {
+      "correlation_id": "0df67f9d",
+      "goal": "Create viral Python content that gets 1M views",
+      "audience": "beginner programmers",
+      "tone": "curiosity",
+      "timestamp": "2025-07-17T16:17:17.662124",
+      "performance": {
+        "pipeline_execution_time": 0.7277472019195557,
+        "step_times": {
+          "data_loading": 0.00491023063659668,
+          "keyword_analysis": 3.600120544433594e-05,
+          "gap_detection": 0.0002732276916503906,
+          "prompt_building": 1.5735626220703125e-05,
+          "ai_generation": 0.722491979598999,
+          "psychological_optimization": 2.002716064453125e-05,
+          "compilation": 1.4781951904296875e-05
+        },
+        "keywords_found": 0,
+        "gaps_identified": 0,
+        "content_pieces_generated": 5
+      }
+    },
+    "success": true
+  },
+  "cli_version": "1.0.0"
+}

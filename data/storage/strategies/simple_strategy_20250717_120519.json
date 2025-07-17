@@ -1,0 +1,63 @@
+{
+  "timestamp": "2025-07-17T12:05:19.223244",
+  "goal": "Test Python tutorial analysis",
+  "audience": "developers",
+  "tone": "educational",
+  "keywords": {
+    "keywords": [
+      "python",
+      "tutorial",
+      "complete",
+      "course",
+      "learn",
+      "programming",
+      "2024",
+      "best",
+      "libraries",
+      "data"
+    ],
+    "total_titles": 10,
+    "unique_keywords": 30
+  },
+  "gaps": {
+    "gaps": [
+      {
+        "topic": "review",
+        "potential": "high"
+      }
+    ],
+    "opportunities": 1
+  },
+  "content": {
+    "titles": [
+      "Ultimate Review Guide with Python",
+      "Best Python Review You Must Know",
+      "Complete Python Tutorial for Beginners",
+      "Advanced Python Tips and Tricks",
+      "Complete Tutorial Tutorial for Beginners"
+    ],
+    "descriptions": [
+      "Learn everything about Test Python tutorial analysis. This comprehensive guide covers all the essential topics.",
+      "Discover the best strategies and techniques. Perfect for beginners and advanced users.",
+      "Step-by-step tutorial covering all aspects. Get practical tips you can use today."
+    ],
+    "tags": [
+      "python",
+      "tutorial",
+      "complete",
+      "course",
+      "learn",
+      "programming",
+      "2024",
+      "best",
+      "libraries",
+      "data"
+    ],
+    "thumbnail_text": [
+      "ULTIMATE GUIDE",
+      "SECRET TIPS",
+      "MUST WATCH"
+    ]
+  },
+  "simple_analysis": true
+}

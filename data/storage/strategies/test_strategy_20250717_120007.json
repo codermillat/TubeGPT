@@ -1,0 +1,69 @@
+{
+  "analysis_result": {
+    "keywords": {
+      "keywords": [
+        "python",
+        "tutorial",
+        "programming"
+      ],
+      "suggestions": [
+        "python tutorial 2024",
+        "learn python"
+      ],
+      "trends": {}
+    },
+    "gaps": {
+      "gaps": [
+        {
+          "topic": "advanced python",
+          "potential": "high"
+        },
+        {
+          "topic": "python projects",
+          "potential": "medium"
+        }
+      ],
+      "opportunities": 2
+    },
+    "optimized_content": {
+      "titles": [
+        "Complete Python Programming Tutorial for Beginners 2024",
+        "Master Python in 30 Days: From Zero to Hero Guide",
+        "Python Secrets That Will Transform Your Coding Skills"
+      ],
+      "descriptions": [
+        "Learn Python programming from scratch with this comprehensive tutorial. Perfect for beginners who want to master programming fundamentals and build real projects.",
+        "Discover advanced Python techniques used by professional developers. This course covers everything from basic syntax to advanced concepts.",
+        "Get hands-on experience with Python projects that will boost your portfolio and help you land your dream programming job."
+      ],
+      "tags": [
+        "python",
+        "programming",
+        "tutorial",
+        "beginner",
+        "coding",
+        "software",
+        "development"
+      ],
+      "thumbnail_text": [
+        "LEARN PYTHON",
+        "CODING TIPS",
+        "PROGRAMMING"
+      ]
+    },
+    "insights": "Analysis completed successfully. Found 3 keywords, 2 content gaps, and generated 3 optimized titles with psychological triggers."
+  },
+  "metadata": {
+    "correlation_id": "test123",
+    "goal": "Test strategy generation",
+    "audience": "developers",
+    "tone": "engaging",
+    "timestamp": "2025-07-17T12:00:07.673545",
+    "performance": {
+      "keywords_found": 3,
+      "gaps_identified": 2,
+      "content_pieces_generated": 3
+    }
+  },
+  "success": true
+}

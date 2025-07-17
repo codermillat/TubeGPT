@@ -18,9 +18,16 @@ import time
 import logging
 from typing import List, Dict, Any, Optional
 from urllib.parse import quote_plus
-from pytrends.request import TrendReq
-from pytrends.exceptions import TooManyRequestsError, ResponseError
 import re
+
+# Optional pytrends import with fallback
+try:
+    from pytrends.request import TrendReq
+    from pytrends.exceptions import TooManyRequestsError, ResponseError
+    PYTRENDS_AVAILABLE = True
+except ImportError:
+    PYTRENDS_AVAILABLE = False
+    logger.warning("pytrends not available, trends features will be disabled")
 
 # Set up logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -91,7 +98,7 @@ class KeywordAnalyzer:
         """
         return get_youtube_autocomplete(seed, region)
     
-    def get_trends_data(self, keywords: List[str], timeframe: str = 'today 12-m', geo: str = 'US') -> pd.DataFrame:
+    def get_trends_data(self, keywords: List[str], timeframe: str = 'today 12-m', geo: str = 'US') -> Dict[str, Any]:
         """
         Get Google Trends data using the class instance.
         FIXED: Uses instance pytrends session for better performance.
@@ -102,18 +109,30 @@ class KeywordAnalyzer:
             geo (str): Geographic region
             
         Returns:
-            pd.DataFrame: Trends data
+            Dict[str, Any]: Trends data or empty dict if pytrends unavailable
         """
-        return get_google_trends(keywords, timeframe, geo)
+        if not PYTRENDS_AVAILABLE:
+            logger.warning("Pytrends not available, returning empty trends data")
+            return {}
+        
+        try:
+            return get_google_trends(keywords, timeframe, geo)
+        except Exception as e:
+            logger.warning(f"Failed to get trends data: {e}")
+            return {}
     
-    def _get_pytrends_instance(self) -> TrendReq:
+    def _get_pytrends_instance(self):
         """
         Get or create pytrends instance with rate limiting.
         FIXED: Proper session management and rate limiting.
         
         Returns:
-            TrendReq: Pytrends instance
+            TrendReq instance or None if pytrends not available
         """
+        if not PYTRENDS_AVAILABLE:
+            logger.warning("Pytrends not available, returning None")
+            return None
+            
         current_time = time.time()
         
         # FIXED: Rate limiting
@@ -410,7 +429,7 @@ def _get_fallback_suggestions(seed: str) -> List[str]:
 # FIXED: Removed old parser function - replaced with improved versions above
 
 # FIXED: Enhanced Google Trends function with better session management
-def get_google_trends(keywords: List[str], timeframe: str = 'today 12-m', geo: str = 'US') -> pd.DataFrame:
+def get_google_trends(keywords: List[str], timeframe: str = 'today 12-m', geo: str = 'US') -> Dict[str, Any]:
     """
     Get Google Trends data for a list of keywords.
     FIXED: Enhanced with better session management, rate limiting, and error handling.
@@ -421,20 +440,19 @@ def get_google_trends(keywords: List[str], timeframe: str = 'today 12-m', geo: s
         geo (str): Geographic region code (e.g., 'US', 'BD', 'IN', '' for worldwide)
         
     Returns:
-        pd.DataFrame: DataFrame with columns:
-            - keyword: The analyzed keyword
-            - avg_interest: Average interest score (0-100)
-            - peak_interest: Peak interest score
-            - related_queries: List of related search queries
-            - rising_terms: List of rising/trending related terms
-            
+        Dict[str, Any]: Dictionary with trends data or empty dict if unavailable
+        
     Raises:
         ValueError: If keywords list is empty or too long
         
     Example:
-        >>> df = get_google_trends(['cooking', 'recipe'], 'today 3-m', 'BD')
-        >>> print(df[['keyword', 'avg_interest']].head())
+        >>> data = get_google_trends(['cooking', 'recipe'], 'today 3-m', 'BD')
+        >>> print(data)
     """
+    if not PYTRENDS_AVAILABLE:
+        logger.warning("Pytrends not available, returning empty data")
+        return {}
+        
     if not keywords:
         raise ValueError("Keywords list cannot be empty")
     
@@ -532,29 +550,38 @@ def get_google_trends(keywords: List[str], timeframe: str = 'today 12-m', geo: s
             logger.info(f"Successfully fetched Google Trends data for {len(cleaned_keywords)} keywords")
             break  # Success, exit retry loop
             
-        except TooManyRequestsError as e:
-            logger.warning(f"Google Trends rate limit exceeded (attempt {attempt + 1}): {e}")
-            if attempt < 2:  # Don't sleep on last attempt
-                logger.info("Waiting 60 seconds before retry...")
-                time.sleep(60)
-            else:
-                raise
-                
-        except ResponseError as e:
-            logger.error(f"Google Trends API error (attempt {attempt + 1}): {e}")
-            if attempt < 2:
-                time.sleep(10)
-            else:
-                raise
-                
         except Exception as e:
-            logger.error(f"Unexpected error fetching Google Trends data (attempt {attempt + 1}): {e}")
-            if attempt < 2:
-                time.sleep(5)
+            # Handle both pytrends exceptions and generic exceptions
+            error_str = str(e).lower()
+            if 'rate limit' in error_str or 'too many requests' in error_str:
+                logger.warning(f"Google Trends rate limit exceeded (attempt {attempt + 1}): {e}")
+                if attempt < 2:  # Don't sleep on last attempt
+                    logger.info("Waiting 60 seconds before retry...")
+                    time.sleep(60)
+                else:
+                    logger.error("Max retries reached, returning empty results")
+                    return {}
+            elif 'response' in error_str or 'api' in error_str:
+                logger.error(f"Google Trends API error (attempt {attempt + 1}): {e}")
+                if attempt < 2:
+                    time.sleep(10)
+                else:
+                    logger.error("Max retries reached, returning empty results")
+                    return {}
             else:
-                raise
+                logger.error(f"Unexpected error fetching Google Trends data (attempt {attempt + 1}): {e}")
+                if attempt < 2:
+                    time.sleep(5)
+                else:
+                    logger.error("Max retries reached, returning empty results")
+                    return {}
     
-    return pd.DataFrame(results)
+    return {
+        'keywords': results,
+        'timeframe': timeframe,
+        'geo': geo,
+        'total_keywords': len(results)
+    }
 
 def analyze_keywords(seed: str, region: str = 'US', timeframe: str = 'today 12-m') -> Dict[str, Any]:
     """

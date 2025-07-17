@@ -1,0 +1,11 @@
+videoId,videoTitle,views,likes,comments,published_at
+abc123,How to Learn Python Programming in 2024,15420,234,45,2024-01-15
+def456,Best Python Libraries for Data Science,8930,156,23,2024-01-20
+ghi789,Python Tutorial for Beginners Complete Course,25670,445,78,2024-01-25
+jkl012,Advanced Python Tips and Tricks,12340,189,34,2024-02-01
+mno345,Python Web Development with Django,18750,298,52,2024-02-05
+pqr678,Machine Learning with Python Basics,31200,567,89,2024-02-10
+stu901,Python Data Analysis with Pandas,9876,123,19,2024-02-15
+vwx234,Python GUI Development Tutorial,14560,245,38,2024-02-20
+yz567,Python API Development with FastAPI,22890,389,67,2024-02-25
+abc890,Python Testing Best Practices,7650,98,15,2024-03-01

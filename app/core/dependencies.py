@@ -46,9 +46,7 @@ async def get_gemini_client(
         raise ConfigurationError("GEMINI_API_KEY is not configured")
     
     return GeminiClient(
-        api_key=settings.GEMINI_API_KEY,
-        model=settings.GEMINI_MODEL,
-        session=session
+        api_key=settings.GEMINI_API_KEY
     )
 
 

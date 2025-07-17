@@ -70,6 +70,10 @@ class YouTubeClient:
         self.base_url = "https://www.googleapis.com/youtube/v3"
         self.api_version = "v3"
         
+        # Timeout configuration
+        self.request_timeout = 30.0  # 30 seconds for YouTube API
+        self.connect_timeout = 10.0  # 10 seconds to establish connection
+        
         # Authentication
         self.credentials = None
         self.service = None
@@ -81,10 +85,11 @@ class YouTubeClient:
         self.rate_limit_window = 60  # seconds
         self.max_requests_per_window = 100
         
-        # Retry configuration
+        # Retry configuration with exponential backoff
         self.max_retries = 3
         self.retry_delay = 1.0
         self.backoff_factor = 2.0
+        self.max_backoff = 30.0
         
         # Initialize token file directory
         self.token_file.parent.mkdir(parents=True, exist_ok=True)
@@ -624,24 +629,48 @@ class YouTubeClient:
         self.quota_used += 1
     
     async def _make_api_request(self, endpoint: str, params: Dict[str, Any]) -> Dict[str, Any]:
-        """Make API request with retry logic."""
+        """Make API request with retry logic and timeout."""
+        last_exception = None
+        
         for attempt in range(self.max_retries):
             try:
-                # Use the synchronous API in async context
+                # Use the synchronous API in async context with timeout
                 def _sync_request():
                     method = getattr(self.service, endpoint)()
                     return method.list(**params).execute()
                 
-                # Run in thread pool to avoid blocking
+                # Run in thread pool with timeout to avoid blocking
                 loop = asyncio.get_event_loop()
-                return await loop.run_in_executor(None, _sync_request)
+                
+                try:
+                    return await asyncio.wait_for(
+                        loop.run_in_executor(None, _sync_request),
+                        timeout=self.request_timeout
+                    )
+                except asyncio.TimeoutError:
+                    raise TimeoutError(f"YouTube API request timed out after {self.request_timeout}s")
                 
             except Exception as e:
-                if attempt == self.max_retries - 1:
-                    raise
+                last_exception = e
                 
-                # Wait before retry
-                await asyncio.sleep(self.retry_delay * (self.backoff_factor ** attempt))
+                # Log the attempt
+                self.logger.warning(
+                    f"YouTube API request attempt {attempt + 1} failed: {e}",
+                    extra={"endpoint": endpoint, "attempt": attempt + 1}
+                )
+                
+                if attempt == self.max_retries - 1:
+                    # Final attempt failed, raise the mapped exception
+                    raise self._map_youtube_exception(e)
+                
+                # Calculate backoff delay
+                delay = min(
+                    self.retry_delay * (self.backoff_factor ** attempt),
+                    self.max_backoff
+                )
+                
+                self.logger.info(f"Retrying YouTube API request in {delay}s...")
+                await asyncio.sleep(delay)
     
     def _format_video_data(self, video: Dict[str, Any]) -> Dict[str, Any]:
         """Format video data for consistent output."""
